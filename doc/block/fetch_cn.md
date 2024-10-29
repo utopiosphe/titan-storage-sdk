@@ -1,4 +1,4 @@
-# 文件上传与 CID 列表、数据获取指南
+# 通过cid获取car文件的block数据
 
 1. **上传文件**
    - 访问测试服务器 [https://storage-test.titannet.io/](https://storage-test.titannet.io/)，登录并上传您需要演示的文件。
