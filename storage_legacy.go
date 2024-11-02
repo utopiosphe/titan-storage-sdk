@@ -636,12 +636,12 @@ func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCl
 
 // GetURL gets the URL of the file
 func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAssetResult, error) {
-	// 100 ms
-	var interval = 1000
+	// 1000 ms
+	var interval = 1 * time.Second
 	var startTime = time.Now()
 	var timeout = 15 * time.Second
 	for {
-		time.Sleep(time.Millisecond * time.Duration(interval))
+		time.Sleep(interval)
 
 		if time.Since(startTime) > timeout {
 			return nil, fmt.Errorf("time out of %ds, can not find asset exist", timeout/time.Second)
