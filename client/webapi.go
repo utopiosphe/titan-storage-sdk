@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httputil"
 
 	"github.com/ipfs/go-cid"
 )
@@ -332,6 +333,11 @@ func (s *webserver) ShareAsset(ctx context.Context, userID, areaID, assetCID str
 	if err != nil {
 		return nil, err
 	}
+
+	requestRaw, _ := httputil.DumpRequest(req, true)
+	responseRaw, _ := httputil.DumpResponse(rsp, true)
+
+	fmt.Printf("ShareAsset DUMP:\n request: %s\nresponse: %s\n", string(requestRaw), string(responseRaw))
 
 	if ret.Code != 0 {
 		return nil, fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
