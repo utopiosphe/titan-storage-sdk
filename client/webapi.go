@@ -337,7 +337,7 @@ func (s *webserver) ShareAsset(ctx context.Context, userID, areaID, assetCID str
 	requestRaw, _ := httputil.DumpRequest(req, true)
 	responseRaw, _ := httputil.DumpResponse(rsp, true)
 
-	fmt.Printf("ShareAsset DUMP:\n request: %s\nresponse: %s\n", string(requestRaw), string(responseRaw))
+	log.Printf("ShareAsset DUMP:\n request: %s\nresponse: %s\n", string(requestRaw), string(responseRaw))
 
 	if ret.Code != 0 {
 		return nil, fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
