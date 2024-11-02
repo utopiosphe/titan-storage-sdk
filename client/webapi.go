@@ -305,7 +305,8 @@ func (s *webserver) DeleteAsset(ctx context.Context, userID, assetCID string) er
 
 // ShareAsset shares user assets.
 func (s *webserver) ShareAsset(ctx context.Context, userID, areaID, assetCID string) (*ShareAssetResult, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/share_asset?user_id=%s&area_id=%s&asset_cid=%s&need_trace=true", s.url, userID, areaID, assetCID)
+	// url := fmt.Sprintf("%s/api/v1/storage/share_asset?user_id=%s&area_id=%s&asset_cid=%s&need_trace=true", s.url, userID, areaID, assetCID)
+	url := fmt.Sprintf("%s/api/v1/storage/share_asset?area_id=%s&asset_cid=%s&need_trace=true", s.url, areaID, assetCID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
