@@ -3,7 +3,7 @@
 1. **上传文件**
    - 访问测试服务器 [https://storage-test.titannet.io/](https://storage-test.titannet.io/)，登录并上传您需要演示的文件。
 
-2. **获取下载链接**
+2. **获取下载链接**![alt text](image.png)
    - 文件上传完成后，打开浏览器的调试控制台（F12）。
    - 点击文件的下载按钮，并观察 `/api/v1/storage/share_asset` 请求的响应。 ![Alt text](share_asset.png)
    - 提取返回的下载链接，格式如下：
