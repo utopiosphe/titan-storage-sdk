@@ -661,9 +661,9 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAsse
 				result.URLs[i] = replaceNodeIDToCID(result.URLs[i], rootCID)
 			}
 			u, _ := url.ParseRequestURI(result.URLs[0])
-			if err != nil {
-				return result, nil
-			}
+			// if err != nil {
+			// 	return result, nil
+			// }
 			if u != nil && u.Query().Get("filename") != "" {
 				result.FileName = u.Query().Get("filename")
 			}
