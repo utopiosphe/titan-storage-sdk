@@ -1,9 +1,12 @@
 package byterange
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"math/rand"
 	"net/http"
@@ -11,6 +14,7 @@ import (
 
 	"github.com/eikenb/pipeat"
 	"github.com/pkg/errors"
+	"github.com/utopiosphe/titan-storage-sdk/client"
 )
 
 type dispatcher struct {
@@ -25,8 +29,9 @@ type dispatcher struct {
 }
 
 type worker struct {
-	// c *http.Client
-	e string
+	c  *http.Client
+	e  string
+	tk *client.BodyToken
 }
 
 type response struct {
@@ -83,75 +88,75 @@ func (d *dispatcher) generateJobs() {
 	}
 }
 
-func (d *dispatcher) run(ctx context.Context) {
+func (d *dispatcher) run(ctx context.Context, sig chan struct{}) {
 	d.generateJobs()
-	d.writeData(ctx)
+	d.writeData(ctx, sig)
 
 	var (
 		counter  int64
 		finished = make(chan int64, 1)
 	)
 
-	// go func() {
-	for {
-		select {
-		case w := <-d.workers:
-			go func() {
-				j, ok := d.todos.Pop()
-				if !ok {
-					d.workers <- w
-					return
-				}
-
-				data, err := d.fetch(ctx, w, j)
-				if err != nil {
-					errMsg := fmt.Sprintf("pull data failed : %v", err)
-					if j.retry > 0 {
-						log.Errorf("pull data failed (retries: %d): %v", j.retry, err)
-						<-time.After(d.backoff.next(j.retry))
+	go func() {
+		for {
+			select {
+			case w := <-d.workers:
+				go func() {
+					j, ok := d.todos.Pop()
+					if !ok {
+						d.workers <- w
+						return
 					}
 
-					log.Warnf(errMsg)
+					data, err := d.fetch(ctx, w, j)
+					if err != nil {
+						errMsg := fmt.Sprintf("pull data failed : %v", err)
+						if j.retry > 0 {
+							log.Printf("pull data failed (retries: %d): %v", j.retry, err)
+							<-time.After(d.backoff.next(j.retry))
+						}
 
-					j.retry++
-					d.todos.PushFront(j)
+						log.Println(errMsg)
+
+						j.retry++
+						d.todos.PushFront(j)
+						d.workers <- w
+						return
+					}
+
+					dataLen := j.end - j.start
+
+					if int64(len(data)) < dataLen {
+						log.Printf("unexpected data size, want %d got %d", dataLen, len(data))
+						d.todos.PushFront(j)
+						d.workers <- w
+						return
+					}
+
 					d.workers <- w
+					log.Printf("fetched data from %d to %d, currnet count: %d", j.start, j.end, counter)
+					d.resp <- response{
+						data:   data[:dataLen],
+						offset: j.start,
+					}
+					finished <- dataLen
+				}()
+			case size := <-finished:
+				log.Printf("counter: %d, received: %d, file-size: %d", counter, size, d.fileSize)
+				counter += size
+				if counter >= d.fileSize {
 					return
 				}
-
-				dataLen := j.end - j.start
-
-				if int64(len(data)) < dataLen {
-					log.Errorf("unexpected data size, want %d got %d", dataLen, len(data))
-					d.todos.PushFront(j)
-					d.workers <- w
-					return
-				}
-
-				d.workers <- w
-				d.resp <- response{
-					data:   data[:dataLen],
-					offset: j.start,
-				}
-				finished <- dataLen
-			}()
-		case size := <-finished:
-			counter += size
-			if counter >= d.fileSize {
+			case <-ctx.Done():
 				return
 			}
-		case <-ctx.Done():
-			return
 		}
-	}
-	// }()
-
-	// return
+	}()
 }
 
-func (d *dispatcher) writeData(ctx context.Context) {
+func (d *dispatcher) writeData(ctx context.Context, sig chan struct{}) {
 	go func() {
-		defer d.finally()
+		defer d.finally(sig)
 
 		var count int64
 		for {
@@ -159,10 +164,10 @@ func (d *dispatcher) writeData(ctx context.Context) {
 			case r := <-d.resp:
 				_, err := d.writer.WriteAt(r.data, r.offset)
 				if err != nil {
-					log.Errorf("write data failed: %v", err)
+					log.Printf("write data failed: %v", err)
 					continue
 				}
-
+				// log.Printf("write data success: %d, length: %d", r.offset, len(r.data))
 				count += int64(len(r.data))
 				if count >= d.fileSize {
 					return
@@ -175,15 +180,42 @@ func (d *dispatcher) writeData(ctx context.Context) {
 	}()
 }
 
+// type timeCal struct {
+// 	t    time.Time
+// 	done chan struct{}
+// }
+
+// func (t *timeCal) cal() {
+// 	for {
+// 		select {
+// 		case <-t.done:
+// 			log.Printf("cal done")
+// 			return
+// 		default:
+// 			log.Printf("time has passed: %v", time.Since(t.t))
+// 		}
+// 		<-time.After(1 * time.Second)
+// 	}
+// }
+
 func (d *dispatcher) fetch(ctx context.Context, w worker, j *job) ([]byte, error) {
-	startTime := time.Now()
-	req, err := http.NewRequest("GET", w.e, nil)
+	// startTime := time.Now()
+
+	var buf bytes.Buffer
+	if w.tk != nil {
+		enc := gob.NewEncoder(&buf)
+		if err := enc.Encode(w.tk); err != nil {
+			return nil, errors.Errorf("encode token failed: %v", err)
+		}
+	}
+
+	req, err := http.NewRequest("GET", w.e, &buf)
 	if err != nil {
 		return nil, errors.Errorf("new request failed: %v", err)
 	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", j.start, j.end))
 	// resp, err := w.c.Do(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := w.c.Do(req)
 	if err != nil {
 		return nil, errors.Errorf("fetch failed: %v", err)
 	}
@@ -203,14 +235,17 @@ func (d *dispatcher) fetch(ctx context.Context, w worker, j *job) ([]byte, error
 		return nil, errors.Errorf("read data failed: %v", err)
 	}
 
-	elapsed := time.Since(startTime)
-	log.Infof("Chunk: %fs, Link: %s", elapsed.Seconds(), w.e)
+	// elapsed := time.Since(startTime)
+	// log.Printf("Chunk: %fs, Link: %s, Range: %d-%d", elapsed.Seconds(), w.e, j.start, j.end)
 
 	return data, nil
 }
 
-func (d *dispatcher) finally() {
+func (d *dispatcher) finally(sig chan struct{}) {
+	if sig != nil {
+		sig <- struct{}{}
+	}
 	if err := d.writer.Close(); err != nil {
-		log.Errorf("close write failed: %v", err)
+		log.Printf("close write failed: %v", err)
 	}
 }

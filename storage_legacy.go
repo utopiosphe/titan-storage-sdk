@@ -507,11 +507,11 @@ func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCl
 
 	r := byterange.New(1 << 20)
 
-	reader, size, err := r.GetFile(ctx, res)
+	reader, progress, err := r.GetFile(ctx, res)
 
 	report := &client.AssetTransferReq{
 		CostMs:       int64(time.Since(start).Milliseconds()),
-		TotalSize:    size,
+		TotalSize:    progress().Total,
 		TransferType: client.AssetTransferTypeDownload,
 		Cid:          rootCID,
 		State:        client.AssetTransferStateFailed,

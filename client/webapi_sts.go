@@ -163,6 +163,13 @@ type ShareAssetResult struct {
 	URLs     []string `json:"url"`
 	TraceID  string   `json:"trace_id"`
 	FileName string
+	Token    *BodyToken
+}
+
+type BodyToken struct {
+	ID         string
+	CipherText string
+	Sign       string
 }
 
 type Result struct {

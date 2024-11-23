@@ -332,11 +332,11 @@ func (s *storage) DownloadAsset(ctx context.Context, assetCID string) (io.ReadCl
 
 	r := byterange.New(1 << 20)
 
-	reader, size, err := r.GetFile(ctx, res)
+	reader, progress, err := r.GetFile(ctx, res)
 
 	report := &client.AssetTransferReq{
 		CostMs:       int64(time.Since(start).Milliseconds()),
-		TotalSize:    size,
+		TotalSize:    progress().Total,
 		TransferType: client.AssetTransferTypeDownload,
 		Cid:          assetCID,
 		State:        client.AssetTransferStateFailed,
@@ -348,6 +348,7 @@ func (s *storage) DownloadAsset(ctx context.Context, assetCID string) (io.ReadCl
 	}
 
 	go func() {
+		<-progress().Done
 		if err := s.webAPI.AssetTransferReport(context.Background(), *report); err != nil {
 			log.Printf("failed to send transfer report, %s", err.Error())
 		}

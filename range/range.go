@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,7 +14,8 @@ import (
 	"time"
 
 	"github.com/eikenb/pipeat"
-	logging "github.com/ipfs/go-log"
+
+	"github.com/quic-go/quic-go/http3"
 	"github.com/utopiosphe/titan-storage-sdk/client"
 	"github.com/utopiosphe/titan-storage-sdk/request"
 )
@@ -23,11 +25,12 @@ const (
 	maxBackoffDelay = 3 * time.Second
 )
 
-var log = logging.Logger("range")
+// var log = logging.Logger("range")
 
 type Range struct {
-	size int64
-	c    *http.Client
+	size       int64
+	c          *http.Client
+	dispatcher *dispatcher
 }
 
 func New(size int64) *Range {
@@ -40,23 +43,36 @@ func New(size int64) *Range {
 	}
 }
 
-func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult) (io.ReadCloser, int64, error) {
+type Progress struct {
+	Written int64
+	Total   int64
+	Done    chan struct{}
+}
+
+type ProgressFunc func() Progress
+
+var zeroProgressFunc = func() Progress {
+	return Progress{0, 0, nil}
+}
+
+func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult) (io.ReadCloser, ProgressFunc, error) {
+
 	workerChan, err := r.makeWorkerChan(ctx, resources)
 	if err != nil {
-		return nil, 0, err
+		return nil, zeroProgressFunc, err
 	}
 
 	fileSize, err := r.getFileSize(ctx, workerChan)
 	if err != nil {
-		return nil, 0, err
+		return nil, zeroProgressFunc, err
 	}
 
 	reader, writer, err := pipeat.Pipe()
 	if err != nil {
-		return nil, 0, err
+		return nil, zeroProgressFunc, err
 	}
 
-	(&dispatcher{
+	d := &dispatcher{
 		fileSize:  fileSize,
 		rangeSize: r.size,
 		reader:    reader,
@@ -67,9 +83,30 @@ func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult)
 			minDelay: minBackoffDelay,
 			maxDelay: maxBackoffDelay,
 		},
-	}).run(ctx)
+	}
+	retProgress := Progress{
+		Written: d.writer.GetWrittenBytes(),
+		Total:   d.fileSize,
+		Done:    make(chan struct{}),
+	}
 
-	return reader, fileSize, nil
+	d.run(ctx, retProgress.Done)
+
+	return reader, func() Progress { return retProgress }, nil
+}
+
+func (r *Range) GetProgress() float64 {
+	if r.dispatcher == nil {
+		return 0
+	}
+	return float64(r.dispatcher.writer.GetWrittenBytes()) / float64(r.size)
+}
+
+func (r *Range) GetWrittenBytes() int64 {
+	if r.dispatcher == nil {
+		return 0
+	}
+	return r.dispatcher.writer.GetWrittenBytes()
 }
 
 func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64, error) {
@@ -83,14 +120,14 @@ func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64,
 		case w := <-workerChan:
 			req, err := http.NewRequest("GET", w.e, nil)
 			if err != nil {
-				log.Errorf("new request failed: %v", err)
+				log.Printf("new request failed: %v", err)
 				continue
 			}
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, start+size))
 			// resp, err := w.c.Do(req)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := w.c.Do(req)
 			if err != nil {
-				log.Errorf("fetch failed: %v", err)
+				log.Printf("fetch failed: %v", err)
 				continue
 			}
 			defer func() {
@@ -102,7 +139,7 @@ func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64,
 			if v != "" {
 				subs := strings.Split(v, "/")
 				if len(subs) != 2 {
-					log.Errorf("invalid content range: %s", v)
+					log.Printf("invalid content range: %s", v)
 				}
 				return strconv.ParseInt(subs[1], 10, 64)
 			}
@@ -124,16 +161,16 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult
 			defer wg.Done()
 
 			client := &http.Client{
-				// Transport: &http3.RoundTripper{TLSClientConfig: tls.Config{
-				// 	InsecureSkipVerify: true,
-				// }},
-				Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-				Timeout:   3 * time.Second,
+				Transport: &http3.RoundTripper{TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				}},
+				// Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+				Timeout: 10 * time.Second,
 			}
 
 			u, err := url.Parse(e)
 			if err != nil {
-				log.Errorf("parse url failed: %v", err)
+				log.Printf("parse url failed: %v", err)
 				return
 			}
 
@@ -147,12 +184,12 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult
 			rpcUrl := fmt.Sprintf("%s/rpc/v0", u.Host)
 			_, err = request.PostJsonRPC(client, rpcUrl, req, nil)
 			if err != nil {
-				log.Errorf("send packet failed: %v", err)
+				log.Printf("send packet failed: %v", err)
 				return
 			}
 
 			workerChan <- worker{
-				// c: client,
+				c: client,
 				e: e,
 			}
 		}(endpoint)
