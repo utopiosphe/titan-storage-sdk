@@ -44,7 +44,7 @@ func New(size int64) *Range {
 }
 
 type Progress struct {
-	Written int64
+	Written func() int64
 	Total   int64
 	Done    chan struct{}
 }
@@ -52,7 +52,7 @@ type Progress struct {
 type ProgressFunc func() Progress
 
 var zeroProgressFunc = func() Progress {
-	return Progress{0, 0, nil}
+	return Progress{nil, 0, nil}
 }
 
 func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult) (io.ReadCloser, ProgressFunc, error) {
@@ -85,7 +85,7 @@ func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult)
 		},
 	}
 	retProgress := Progress{
-		Written: d.writer.GetWrittenBytes(),
+		Written: d.writer.GetWrittenBytes,
 		Total:   d.fileSize,
 		Done:    make(chan struct{}),
 	}
@@ -161,7 +161,7 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult
 			e := res.URLs[idx]
 
 			var tk *client.BodyToken
-			if len(res.Token) >= idx {
+			if len(res.Token) > 0 && len(res.Token) >= idx {
 				tk = res.Token[idx]
 			}
 

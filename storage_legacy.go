@@ -523,6 +523,7 @@ func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCl
 	}
 
 	go func() {
+		<-progress().Done
 		if err := s.webAPI.AssetTransferReport(context.Background(), *report); err != nil {
 			log.Printf("failed to send transfer report, %s", err.Error())
 		}
