@@ -156,8 +156,15 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult
 	var wg sync.WaitGroup
 	wg.Add(len(res.URLs))
 
-	for _, endpoint := range res.URLs {
-		go func(e string) {
+	for i := range res.URLs {
+		go func(idx int) {
+			e := res.URLs[idx]
+
+			var tk *client.BodyToken
+			if len(res.Token) >= idx {
+				tk = res.Token[idx]
+			}
+
 			defer wg.Done()
 
 			client := &http.Client{
@@ -189,10 +196,11 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult
 			}
 
 			workerChan <- worker{
-				c: client,
-				e: e,
+				c:  client,
+				e:  e,
+				tk: tk,
 			}
-		}(endpoint)
+		}(i)
 	}
 	wg.Wait()
 
