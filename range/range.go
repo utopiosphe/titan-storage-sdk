@@ -33,12 +33,16 @@ type Range struct {
 	dispatcher *dispatcher
 }
 
-func New(size int64) *Range {
+func New(size int64, seconds int) *Range {
+	if seconds < 1 {
+		seconds = 1
+	}
+
 	return &Range{
 		size: size,
 		c: &http.Client{
 			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-			Timeout:   3 * time.Second,
+			Timeout:   time.Duration(seconds) * time.Second,
 		},
 	}
 }

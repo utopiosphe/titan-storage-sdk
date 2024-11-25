@@ -505,7 +505,7 @@ func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCl
 
 	start := time.Now()
 
-	r := byterange.New(1 << 20)
+	r := byterange.New(1<<20, 3)
 
 	reader, progress, err := r.GetFile(ctx, res)
 

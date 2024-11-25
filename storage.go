@@ -330,7 +330,7 @@ func (s *storage) DownloadAsset(ctx context.Context, assetCID string) (io.ReadCl
 
 	start := time.Now()
 
-	r := byterange.New(1 << 20)
+	r := byterange.New(1<<20, 3)
 
 	reader, progress, err := r.GetFile(ctx, res)
 
