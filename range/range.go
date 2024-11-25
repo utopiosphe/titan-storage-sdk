@@ -87,7 +87,7 @@ func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult)
 	retProgress := Progress{
 		Written: d.writer.GetWrittenBytes,
 		Total:   d.fileSize,
-		Done:    make(chan struct{}),
+		Done:    make(chan struct{}, 1),
 	}
 
 	d.run(ctx, retProgress.Done)
@@ -172,7 +172,7 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult
 					InsecureSkipVerify: true,
 				}},
 				// Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-				Timeout: 10 * time.Second,
+				Timeout: 5 * time.Second,
 			}
 
 			u, err := url.Parse(e)
