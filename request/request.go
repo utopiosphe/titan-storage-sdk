@@ -12,7 +12,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/ipfs/boxo/files"
+	files "github.com/ipfs/go-ipfs-files"
 )
 
 type request struct {
