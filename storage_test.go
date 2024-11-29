@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Filecoin-Titan/titan-storage-sdk/memfile"
+	"github.com/utopiosphe/titan-storage-sdk/memfile"
 )
 
 var (
@@ -62,7 +62,7 @@ func TestCreateCarWithStream(t *testing.T) {
 }
 
 func TestUpload(t *testing.T) {
-	storage, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	storage, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -107,7 +107,7 @@ func TestUpload(t *testing.T) {
 }
 
 func TestUploadStream(t *testing.T) {
-	storage, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	storage, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -132,7 +132,7 @@ func TestUploadStream(t *testing.T) {
 }
 
 func TestGetFile(t *testing.T) {
-	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	s, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -187,7 +187,7 @@ func TestGetFile(t *testing.T) {
 }
 
 func TestUploadFileWithURL(t *testing.T) {
-	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	s, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -212,7 +212,7 @@ func TestUploadFileWithURL(t *testing.T) {
 }
 
 func TestListAsset(t *testing.T) {
-	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	s, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -226,4 +226,23 @@ func TestListAsset(t *testing.T) {
 	for _, asset := range rsp.AssetOverviews {
 		t.Logf("cid:%s name:%s size:%d", asset.AssetRecord.CID, asset.UserAssetDetail.AssetName, asset.AssetRecord.TotalSize)
 	}
+}
+
+func TestGetFileWithCid(t *testing.T) {
+	locatorURL := "https://api-test1.container1.titannet.io"
+	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MzI2MDk0NzMsImlkIjoiMHg5ZGFjNjNhYjE5OTQzMjdmZjAyMjY4MDUyZmQwYThkODlmZjgxMzNjIiwib3JpZ19pYXQiOjE3MzI1MjMwNzMsInJvbGUiOjB9.y8DSMQ4XjJFs9AiPzZDMbflk7MMPbvGYnWrkOcSePU8"
+	s, err := Initialize(&Config{TitanURL: locatorURL, Token: token})
+	if err != nil {
+		t.Fatal("NewStorage error ", err)
+	}
+	r, fn, err := s.GetFileWithCid(context.Background(), "bafybeic7d7hf67yfgvv2wtdwth7uka2suqzr3cg3a52pt3bg3hhorsmp3m")
+	if err != nil {
+		t.Fatal("GetFileWithCid ", err)
+	}
+	defer r.Close()
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal("GetFileWithCid ", err)
+	}
+	t.Logf("file:%s, size:%d", fn, len(data))
 }

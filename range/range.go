@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/eikenb/pipeat"
-
 	"github.com/quic-go/quic-go/http3"
 	"github.com/utopiosphe/titan-storage-sdk/client"
 	"github.com/utopiosphe/titan-storage-sdk/request"
@@ -29,21 +28,18 @@ const (
 
 type Range struct {
 	size       int64
-	c          *http.Client
+	timeout    time.Duration
 	dispatcher *dispatcher
 }
 
 func New(size int64, seconds int) *Range {
 	if seconds < 1 {
-		seconds = 1
+		seconds = 5
 	}
 
 	return &Range{
-		size: size,
-		c: &http.Client{
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-			Timeout:   time.Duration(seconds) * time.Second,
-		},
+		size:    size,
+		timeout: time.Duration(seconds) * time.Second,
 	}
 }
 
@@ -59,7 +55,7 @@ var zeroProgressFunc = func() Progress {
 	return Progress{nil, 0, nil}
 }
 
-func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult) (io.ReadCloser, ProgressFunc, error) {
+func (r *Range) GetFile(ctx context.Context, resources *client.RangeGetFileReq) (io.ReadCloser, ProgressFunc, error) {
 
 	workerChan, err := r.makeWorkerChan(ctx, resources)
 	if err != nil {
@@ -82,6 +78,7 @@ func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult)
 		reader:    reader,
 		writer:    writer,
 		workers:   workerChan,
+		workloads: newWorkloadIDMapFromMapPointer(resources.Workload),
 		resp:      make(chan response, len(workerChan)),
 		backoff: &backoff{
 			minDelay: minBackoffDelay,
@@ -100,7 +97,7 @@ func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult)
 }
 
 func (r *Range) GetProgress() float64 {
-	if r.dispatcher == nil {
+	if r.dispatcher == nil || r.size == 0 {
 		return 0
 	}
 	return float64(r.dispatcher.writer.GetWrittenBytes()) / float64(r.size)
@@ -128,7 +125,7 @@ func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64,
 				continue
 			}
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, start+size))
-			// resp, err := w.c.Do(req)
+
 			resp, err := w.c.Do(req)
 			if err != nil {
 				log.Printf("fetch failed: %v", err)
@@ -147,39 +144,32 @@ func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64,
 				}
 				return strconv.ParseInt(subs[1], 10, 64)
 			}
-			//"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n400 Bad Requestarset=utf-8\r\n\r\n{\"jsonrpc\":\"2.0\",\"result\":{\"Version\":\"0.1.21+git.5b4fc64+linux-amd64\",\"APIVersion\":65536,\"BlockDelay\":0},\"id\":\"1\"}\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00...+3584 more"
+
 		case <-ctx.Done():
 			return 0, ctx.Err()
 		}
 	}
 }
 
-func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult) (chan worker, error) {
-	workerChan := make(chan worker, len(res.URLs))
+func (r *Range) makeWorkerChan(ctx context.Context, res *client.RangeGetFileReq) (chan worker, error) {
+	workerChan := make(chan worker, len(res.Urls))
 
 	var wg sync.WaitGroup
-	wg.Add(len(res.URLs))
+	wg.Add(len(res.Urls))
 
-	for i := range res.URLs {
+	for i, u := range res.Urls {
 		go func(idx int) {
-			e := res.URLs[idx]
-
-			var tk *client.BodyToken
-			if len(res.Token) > 0 && len(res.Token) >= idx {
-				tk = res.Token[idx]
-			}
-
 			defer wg.Done()
 
+			var tk *client.BodyToken = u.Token
 			client := &http.Client{
 				Transport: &http3.RoundTripper{TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				}},
-				// Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
-				Timeout: 5 * time.Second,
+				Timeout: 1 * time.Second,
 			}
 
-			u, err := url.Parse(e)
+			uu, err := url.Parse(u.Url)
 			if err != nil {
 				log.Printf("parse url failed: %v", err)
 				return
@@ -192,17 +182,21 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult
 				Params:  nil,
 			}
 
-			rpcUrl := fmt.Sprintf("%s/rpc/v0", u.Host)
+			rpcUrl := fmt.Sprintf("%s/rpc/v0", uu.Host)
 			_, err = request.PostJsonRPC(client, rpcUrl, req, nil)
 			if err != nil {
 				log.Printf("send packet failed: %v", err)
 				return
 			}
 
+			client.Timeout = r.timeout
+
 			workerChan <- worker{
-				c:  client,
-				e:  e,
-				tk: tk,
+				c:          client,
+				e:          u.Url,
+				tk:         tk,
+				nodeID:     u.NodeID,
+				workloadID: u.WorkloadID,
 			}
 		}(i)
 	}

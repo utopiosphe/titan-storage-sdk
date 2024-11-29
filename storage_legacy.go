@@ -507,7 +507,7 @@ func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCl
 
 	r := byterange.New(1<<20, 3)
 
-	reader, progress, err := r.GetFile(ctx, res)
+	reader, progress, err := r.GetFile(ctx, res.Copy2RangeFileReq())
 
 	report := &client.AssetTransferReq{
 		CostMs:       int64(time.Since(start).Milliseconds()),

@@ -10,8 +10,10 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 
+	"github.com/Filecoin-Titan/titan/api/types"
 	"github.com/eikenb/pipeat"
 	"github.com/pkg/errors"
 	"github.com/utopiosphe/titan-storage-sdk/client"
@@ -26,12 +28,32 @@ type dispatcher struct {
 	writer    *pipeat.PipeWriterAt
 	reader    *pipeat.PipeReaderAt
 	backoff   *backoff
+	workloads *workloadIDMap
+}
+
+type workloadIDMap struct {
+	m  map[string][]types.Workload
+	mu sync.Mutex
+}
+
+func (w *workloadIDMap) Append(wr types.Workload, workloadID string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.m[workloadID] = append(w.m[workloadID], wr)
+}
+
+func newWorkloadIDMapFromMapPointer(m map[string][]types.Workload) *workloadIDMap {
+	return &workloadIDMap{
+		m: m,
+	}
 }
 
 type worker struct {
-	c  *http.Client
-	e  string
-	tk *client.BodyToken
+	c          *http.Client
+	e          string
+	tk         *client.BodyToken
+	nodeID     string
+	workloadID string
 }
 
 type response struct {
@@ -88,6 +110,13 @@ func (d *dispatcher) generateJobs() {
 	}
 }
 
+type debugRunningNode struct {
+	start   int64
+	end     int64
+	succeed bool
+	cost    time.Duration
+}
+
 func (d *dispatcher) run(ctx context.Context, sig chan struct{}) {
 	d.generateJobs()
 	d.writeData(ctx, sig)
@@ -110,13 +139,10 @@ func (d *dispatcher) run(ctx context.Context, sig chan struct{}) {
 
 					data, err := d.fetch(ctx, w, j)
 					if err != nil {
-						errMsg := fmt.Sprintf("pull data failed : %v", err)
 						if j.retry > 0 {
-							log.Printf("pull data failed (retries: %d): %v", j.retry, err)
+							log.Printf("[pull data failed] (retries: %d, from: %d, to: %d): %v", j.retry, j.start, j.end, err)
 							<-time.After(d.backoff.next(j.retry))
 						}
-
-						log.Println(errMsg)
 
 						j.retry++
 						d.todos.PushFront(j)
@@ -134,7 +160,7 @@ func (d *dispatcher) run(ctx context.Context, sig chan struct{}) {
 					}
 
 					d.workers <- w
-					log.Printf("fetched data from %d to %d, currnet count: %d", j.start, j.end, counter)
+					// log.Printf("fetched data from %d to %d, currnet count: %d", j.start, j.end, counter)
 					d.resp <- response{
 						data:   data[:dataLen],
 						offset: j.start,
@@ -214,31 +240,67 @@ func (d *dispatcher) fetch(ctx context.Context, w worker, j *job) ([]byte, error
 		return nil, errors.Errorf("new request failed: %v", err)
 	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", j.start, j.end))
-	// resp, err := w.c.Do(req)
-	resp, err := w.c.Do(req)
+
+	te := time.Now()
+
+	halfCancelCtx, cancel := context.WithTimeout(ctx, w.c.Timeout/2)
+	defer cancel()
+
+	resp, err := w.c.Do(req.WithContext(halfCancelCtx))
 	if err != nil {
 		return nil, errors.Errorf("fetch failed: %v", err)
 	}
-
-	defer func() {
-		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
-		}
-	}()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to download chunk: %d-%d, status code: %d", j.start, j.end, resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Errorf("read data failed: %v", err)
+	ctbReader := &countableReader{
+		Reader: resp.Body,
 	}
 
+	go func() {
+		<-halfCancelCtx.Done()
+		if ctbReader.count < int64((j.start-j.end)/2) {
+			cancel()
+		}
+	}()
+
+	data, err := io.ReadAll(ctbReader)
+
+	workload := types.Workload{
+		SourceID:     w.nodeID,
+		DownloadSize: int64(len(data)),
+		CostTime:     time.Since(te).Milliseconds(),
+	}
+
+	defer func() {
+		d.workloads.Append(workload, w.workloadID)
+	}()
+
+	if err != nil {
+		workload.Status = types.WorkloadReqStatusFailed
+		return nil, errors.Errorf("read data failed: %v", err)
+	}
+	workload.Status = types.WorkloadReqStatusSucceeded
 	// elapsed := time.Since(startTime)
 	// log.Printf("Chunk: %fs, Link: %s, Range: %d-%d", elapsed.Seconds(), w.e, j.start, j.end)
 
 	return data, nil
+}
+
+type countableReader struct {
+	io.Reader
+	count int64
+}
+
+func (c *countableReader) Read(p []byte) (int, error) {
+	n, err := c.Reader.Read(p)
+	if n > 0 {
+		c.count += int64(n)
+	}
+	return n, err
 }
 
 func (d *dispatcher) finally(sig chan struct{}) {
