@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -67,7 +68,18 @@ func (r *Range) GetFile(ctx context.Context, resources *client.RangeGetFileReq) 
 		return nil, zeroProgressFunc, err
 	}
 
-	reader, writer, err := pipeat.Pipe()
+	var (
+		reader *pipeat.PipeReaderAt
+		writer *pipeat.PipeWriterAt
+	)
+
+	PipeDir := os.Getenv("TITAN_PIPE_DIR")
+	if PipeDir == "" {
+		reader, writer, err = pipeat.Pipe()
+	} else {
+		reader, writer, err = pipeat.PipeInDir(PipeDir)
+	}
+
 	if err != nil {
 		return nil, zeroProgressFunc, err
 	}
