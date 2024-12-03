@@ -182,7 +182,7 @@ func (d *dispatcher) run(ctx context.Context, sig chan struct{}) {
 
 func (d *dispatcher) writeData(ctx context.Context, sig chan struct{}) {
 	go func() {
-		defer d.finally(sig)
+		defer d.finally()
 
 		var count int64
 		for {
@@ -196,6 +196,7 @@ func (d *dispatcher) writeData(ctx context.Context, sig chan struct{}) {
 				// log.Printf("write data success: %d, length: %d", r.offset, len(r.data))
 				count += int64(len(r.data))
 				if count >= d.fileSize {
+					sig <- struct{}{}
 					return
 				}
 			case <-ctx.Done():
@@ -303,10 +304,7 @@ func (c *countableReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (d *dispatcher) finally(sig chan struct{}) {
-	if sig != nil {
-		sig <- struct{}{}
-	}
+func (d *dispatcher) finally() {
 	if err := d.writer.Close(); err != nil {
 		log.Printf("close write failed: %v", err)
 	}
