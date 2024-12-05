@@ -242,10 +242,10 @@ func (d *dispatcher) fetch(ctx context.Context, w worker, j *job) ([]byte, error
 
 	// te := time.Now()
 
-	halfCancelCtx, cancel := context.WithTimeout(ctx, w.c.Timeout/2)
-	defer cancel()
+	// halfCancelCtx, cancel := context.WithTimeout(ctx, w.c.Timeout/2)
+	// defer cancel()
 
-	resp, err := w.c.Do(req.WithContext(halfCancelCtx))
+	resp, err := w.c.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Errorf("fetch failed: %v", err)
 	}
@@ -259,12 +259,12 @@ func (d *dispatcher) fetch(ctx context.Context, w worker, j *job) ([]byte, error
 		Reader: resp.Body,
 	}
 
-	go func() {
-		<-halfCancelCtx.Done()
-		if ctbReader.count < int64((j.start-j.end)/2) {
-			cancel()
-		}
-	}()
+	// go func() {
+	// 	// <-halfCancelCtx.Done()
+	// 	if ctbReader.count < int64((j.start-j.end)/2) {
+	// 		cancel()
+	// 	}
+	// }()
 
 	data, err := io.ReadAll(ctbReader)
 
