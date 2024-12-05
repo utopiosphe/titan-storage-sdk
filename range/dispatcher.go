@@ -10,10 +10,8 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
-	"sync"
 	"time"
 
-	"github.com/Filecoin-Titan/titan/api/types"
 	"github.com/eikenb/pipeat"
 	"github.com/pkg/errors"
 	"github.com/utopiosphe/titan-storage-sdk/client"
@@ -28,32 +26,32 @@ type dispatcher struct {
 	writer    *pipeat.PipeWriterAt
 	reader    *pipeat.PipeReaderAt
 	backoff   *backoff
-	workloads *workloadIDMap
+	// workloads *workloadIDMap
 }
 
-type workloadIDMap struct {
-	m  map[string][]types.Workload
-	mu sync.Mutex
-}
+// type workloadIDMap struct {
+// 	m  map[string][]types.Workload
+// 	mu sync.Mutex
+// }
 
-func (w *workloadIDMap) Append(wr types.Workload, workloadID string) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.m[workloadID] = append(w.m[workloadID], wr)
-}
+// func (w *workloadIDMap) Append(wr types.Workload, workloadID string) {
+// 	w.mu.Lock()
+// 	defer w.mu.Unlock()
+// 	w.m[workloadID] = append(w.m[workloadID], wr)
+// }
 
-func newWorkloadIDMapFromMapPointer(m map[string][]types.Workload) *workloadIDMap {
-	return &workloadIDMap{
-		m: m,
-	}
-}
+// func newWorkloadIDMapFromMapPointer(m map[string][]types.Workload) *workloadIDMap {
+// 	return &workloadIDMap{
+// 		m: m,
+// 	}
+// }
 
 type worker struct {
-	c          *http.Client
-	e          string
-	tk         *client.BodyToken
-	nodeID     string
-	workloadID string
+	c      *http.Client
+	e      string
+	tk     *client.BodyToken
+	nodeID string
+	// workloadID string
 }
 
 type response struct {
@@ -242,7 +240,7 @@ func (d *dispatcher) fetch(ctx context.Context, w worker, j *job) ([]byte, error
 	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", j.start, j.end))
 
-	te := time.Now()
+	// te := time.Now()
 
 	halfCancelCtx, cancel := context.WithTimeout(ctx, w.c.Timeout/2)
 	defer cancel()
@@ -270,21 +268,21 @@ func (d *dispatcher) fetch(ctx context.Context, w worker, j *job) ([]byte, error
 
 	data, err := io.ReadAll(ctbReader)
 
-	workload := types.Workload{
-		SourceID:     w.nodeID,
-		DownloadSize: int64(len(data)),
-		CostTime:     time.Since(te).Milliseconds(),
-	}
+	// workload := types.Workload{
+	// 	SourceID:     w.nodeID,
+	// 	DownloadSize: int64(len(data)),
+	// 	CostTime:     time.Since(te).Milliseconds(),
+	// }
 
-	defer func() {
-		d.workloads.Append(workload, w.workloadID)
-	}()
+	// defer func() {
+	// 	d.workloads.Append(workload, w.workloadID)
+	// }()
 
 	if err != nil {
-		workload.Status = types.WorkloadReqStatusFailed
+		// workload.Status = types.WorkloadReqStatusFailed
 		return nil, errors.Errorf("read data failed: %v", err)
 	}
-	workload.Status = types.WorkloadReqStatusSucceeded
+	// workload.Status = types.WorkloadReqStatusSucceeded
 	// elapsed := time.Since(startTime)
 	// log.Printf("Chunk: %fs, Link: %s, Range: %d-%d", elapsed.Seconds(), w.e, j.start, j.end)
 

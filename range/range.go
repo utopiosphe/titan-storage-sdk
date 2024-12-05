@@ -90,8 +90,8 @@ func (r *Range) GetFile(ctx context.Context, resources *client.RangeGetFileReq) 
 		reader:    reader,
 		writer:    writer,
 		workers:   workerChan,
-		workloads: newWorkloadIDMapFromMapPointer(resources.Workload),
-		resp:      make(chan response, len(workerChan)),
+		// workloads: newWorkloadIDMapFromMapPointer(resources.Workload),
+		resp: make(chan response, len(workerChan)),
 		backoff: &backoff{
 			minDelay: minBackoffDelay,
 			maxDelay: maxBackoffDelay,
@@ -204,11 +204,11 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.RangeGetFileReq)
 			client.Timeout = r.timeout
 
 			workerChan <- worker{
-				c:          client,
-				e:          u.Url,
-				tk:         tk,
-				nodeID:     u.NodeID,
-				workloadID: u.WorkloadID,
+				c:      client,
+				e:      u.Url,
+				tk:     tk,
+				nodeID: u.NodeID,
+				// workloadID: u.WorkloadID,
 			}
 		}(i)
 	}
