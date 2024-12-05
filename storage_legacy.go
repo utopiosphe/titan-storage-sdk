@@ -119,6 +119,7 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 	return &ret, nil
 }
 
+// return root, subs, error
 func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath string, progress ProgressFunc) (cid.Cid, error) {
 	// delete template file if exist
 	fileName := filepath.Base(filePath)
@@ -230,6 +231,128 @@ func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath st
 	}
 
 	return cid.Cid{}, fmt.Errorf("upload file failed")
+}
+
+// FetchBlockFromRoot fetch single block from rootCID
+// It returns the block and any error encountered.
+func (s *storage) FetchBlockFromRoot(ctx context.Context, rootCid, subCid string) (io.ReadCloser, error) {
+
+	res, err := s.webAPI.ShareAsset(ctx, s.userID, "", rootCid, false)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(res.URLs) > 0 {
+		for _, v := range res.URLs {
+			// https://<node-id-address>/ipfs/<YOUR-CID-HERE>?token=<YOUR-TOKEN>&filename=<YOUR-FILENAME>
+			// https://<node-id-address>/ipfs/<SUB-CID-YOU-PICK>?token=<YOUR-TOKEN>&format=raw
+			u, err := url.ParseRequestURI(v)
+			if err != nil {
+				log.Printf("url parse error %s", err.Error())
+				continue
+			}
+			queryParams := u.Query()
+
+			token := queryParams.Get("token")
+			if token == "" {
+				log.Printf("token is empty")
+				continue
+			}
+
+			blockUrl := fmt.Sprintf("https://%s/ipfs/%s?token=%s&format=raw", u.Host, subCid, token)
+			req, err := http.NewRequest("GET", blockUrl, nil)
+			if err != nil {
+				log.Printf("new request error %s", err.Error())
+				continue
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("do request error %s", err.Error())
+				continue
+			}
+
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+				log.Printf("http StatusCode %d", resp.StatusCode)
+				continue
+			}
+
+			return resp.Body, nil
+		}
+	}
+
+	return nil, fmt.Errorf("get subcid failed")
+}
+
+// ListAllBlocks retrieves a list of all blocks associated with the specified rootCID.
+func (s *storage) ListAllBlocks(ctx context.Context, rootCid string) ([]string, error) {
+	res, err := s.webAPI.ShareAsset(ctx, s.userID, "", rootCid, false)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(res.URLs) > 0 {
+		for _, v := range res.URLs {
+			// https://<node-id-address>/ipfs/<YOUR-CID-HERE>?token=<YOUR-TOKEN>&filename=<YOUR-FILENAME>
+			// https: //<node-id-address>/ipfs/<YOUR-CID-HERE>?token=<YOUR-TOKEN>&format=refs
+			u, err := url.ParseRequestURI(v)
+			if err != nil {
+				log.Printf("url parse error %s", err.Error())
+				continue
+			}
+			queryParams := u.Query()
+
+			token := queryParams.Get("token")
+			if token == "" {
+				log.Printf("token is empty")
+				continue
+			}
+
+			listBlockUrl := fmt.Sprintf("https://%s/ipfs/%s?token=%s&format=refs", u.Host, rootCid, token)
+			req, err := http.NewRequest("GET", listBlockUrl, nil)
+			if err != nil {
+				log.Printf("new request error %s", err.Error())
+				continue
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("do request error %s", err.Error())
+				continue
+			}
+
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+				log.Printf("http StatusCode %d", resp.StatusCode)
+				continue
+			}
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Printf("read body error %s", err.Error())
+				continue
+			}
+
+			var result []map[string]string
+
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("json unmarshal error %s", err.Error())
+				continue
+			}
+
+			var ret []string
+
+			for _, v := range result {
+				for _, vv := range v {
+					ret = append(ret, vv)
+				}
+			}
+
+			return ret, nil
+		}
+	}
+
+	return nil, fmt.Errorf("get asset failed")
+
 }
 
 // UploadFilesWithPath uploads files from the specified path
@@ -648,7 +771,7 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAsse
 			return nil, fmt.Errorf("time out of %ds, can not find asset exist", timeout/time.Second)
 		}
 
-		result, err := s.webAPI.ShareAsset(ctx, s.userID, "", rootCID)
+		result, err := s.webAPI.ShareAsset(ctx, s.userID, "", rootCID, true)
 		if err != nil {
 			log.Printf("ShareUserAsset %v, cid: %s \n", err.Error(), rootCID)
 			// if err.Error() != errAssetNotExist(rootCID).Error() {

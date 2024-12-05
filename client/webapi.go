@@ -36,7 +36,7 @@ type Webserver interface {
 	// DeleteAsset deletes the asset of the user.
 	DeleteAsset(ctx context.Context, userID, assetCID string) error
 	// ShareAsset shares the assets of the user.
-	ShareAsset(ctx context.Context, userID, areaID, assetCID string) (*ShareAssetResult, error)
+	ShareAsset(ctx context.Context, userID, areaID, assetCID string, needTrace bool) (*ShareAssetResult, error)
 	// GetCandidateIPs retrieves information about candidate IPs.
 	GetCandidateIPs(ctx context.Context) ([]*CandidateIPInfo, error)
 	// ListAssets lists the assets of the user.
@@ -217,7 +217,7 @@ func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*Cr
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("url: ", uploadUrl, "data: ", string(jsonBytes))
+	// fmt.Println("url: ", uploadUrl, "data: ", string(jsonBytes))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uploadUrl, bytes.NewBuffer(jsonBytes))
 	if err != nil {
@@ -304,9 +304,12 @@ func (s *webserver) DeleteAsset(ctx context.Context, userID, assetCID string) er
 }
 
 // ShareAsset shares user assets.
-func (s *webserver) ShareAsset(ctx context.Context, userID, areaID, assetCID string) (*ShareAssetResult, error) {
+func (s *webserver) ShareAsset(ctx context.Context, userID, areaID, assetCID string, needTrace bool) (*ShareAssetResult, error) {
 	// url := fmt.Sprintf("%s/api/v1/storage/share_asset?user_id=%s&area_id=%s&asset_cid=%s&need_trace=true", s.url, userID, areaID, assetCID)
-	url := fmt.Sprintf("%s/api/v1/storage/share_asset?area_id=%s&asset_cid=%s&need_trace=true", s.url, areaID, assetCID)
+	url := fmt.Sprintf("%s/api/v1/storage/share_asset?area_id=%s&asset_cid=%s", s.url, areaID, assetCID)
+	if needTrace {
+		url += "&need_trace=true"
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err

@@ -95,6 +95,14 @@ type Storage interface {
 	// specified by the given filePath. It returns the CID (Content Identifier) and any error encountered.
 	// if makeCar is true, it will make car in local, else will make car in server
 	UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc, makeCar bool) (cid.Cid, error)
+
+	// FetchBlockFromRoot fetch single block from rootCID
+	// It returns the block and any error encountered.
+	FetchBlockFromRoot(ctx context.Context, rootCid, subCid string) (io.ReadCloser, error)
+
+	// ListAllBlocks retrieves a list of all blocks associated with the specified rootCID.
+	ListAllBlocks(ctx context.Context, rootCid string) ([]string, error)
+
 	// UploadFileWithURL uploads a file from the specified URL to the titan storage.
 	// It returns the rootCID and the URL of the uploaded file, along with any error encountered.
 	UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error)

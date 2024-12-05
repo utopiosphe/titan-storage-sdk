@@ -2,8 +2,6 @@ package client
 
 import (
 	"time"
-
-	"github.com/Filecoin-Titan/titan/api/types"
 )
 
 type JWTPayload struct {
@@ -173,15 +171,15 @@ type ShareAssetResult struct {
 }
 
 type RangeGetFileReq struct {
-	Urls     []UrlWithBodyToken
-	Workload map[string][]types.Workload
+	Urls []UrlOrWithBodyToken
+	// Workload map[string][]types.Workload
 }
 
-type UrlWithBodyToken struct {
-	Url        string
-	WorkloadID string
-	Token      *BodyToken
-	NodeID     string
+type UrlOrWithBodyToken struct {
+	Url string
+	// WorkloadID string
+	Token  *BodyToken
+	NodeID string
 }
 
 // type WorkloadInfo struct {
@@ -242,16 +240,14 @@ func (s *ShareAssetResult) Copy2RangeFileReq() *RangeGetFileReq {
 		return nil
 	}
 
-	ret := &RangeGetFileReq{
-		Workload: nil,
-	}
+	ret := &RangeGetFileReq{}
 
 	for _, url := range s.URLs {
-		ret.Urls = append(ret.Urls, UrlWithBodyToken{
-			Url:        url,
-			WorkloadID: "",
-			Token:      nil,
-			NodeID:     "",
+		ret.Urls = append(ret.Urls, UrlOrWithBodyToken{
+			Url: url,
+			// WorkloadID: "",
+			Token:  nil,
+			NodeID: "",
 		})
 	}
 	return ret
