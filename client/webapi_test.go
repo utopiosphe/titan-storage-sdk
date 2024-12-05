@@ -57,7 +57,7 @@ func TestDeleteAsset(t *testing.T) {
 
 func TestShareAsset(t *testing.T) {
 	webserver := NewWebserver(url, key, "")
-	result, err := webserver.ShareAsset(context.Background(), "1052441607@qq.com", "", "bafkreifnpu6du62vascvvnpfxgbonagqdkxjs53v2q4g5vne6nbirmwpdu")
+	result, err := webserver.ShareAsset(context.Background(), "1052441607@qq.com", "", "bafkreifnpu6du62vascvvnpfxgbonagqdkxjs53v2q4g5vne6nbirmwpdu", false)
 	if err != nil {
 		fmt.Println(err)
 		return
