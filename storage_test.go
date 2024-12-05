@@ -15,6 +15,7 @@ import (
 var (
 	apiKey     = os.Getenv("API_KEY")
 	locatorURL = os.Getenv("LOCATOR_URL")
+	token      = os.Getenv("TOKEN")
 )
 
 func TestCalculateCarCID(t *testing.T) {
@@ -33,8 +34,8 @@ func TestCalculateCarCID(t *testing.T) {
 
 func TestCreateCarWithFile(t *testing.T) {
 
-	input := "./example/example.exe"
-	output := "./example/example.car"
+	input := "xx.zip"
+	output := "./xx.car"
 
 	root, err := createCar(input, output)
 	if err != nil {
@@ -229,8 +230,6 @@ func TestListAsset(t *testing.T) {
 }
 
 func TestGetFileWithCid(t *testing.T) {
-	locatorURL := "https://api-test1.container1.titannet.io"
-	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MzI2MDk0NzMsImlkIjoiMHg5ZGFjNjNhYjE5OTQzMjdmZjAyMjY4MDUyZmQwYThkODlmZjgxMzNjIiwib3JpZ19pYXQiOjE3MzI1MjMwNzMsInJvbGUiOjB9.y8DSMQ4XjJFs9AiPzZDMbflk7MMPbvGYnWrkOcSePU8"
 	s, err := Initialize(&Config{TitanURL: locatorURL, Token: token})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
@@ -245,4 +244,48 @@ func TestGetFileWithCid(t *testing.T) {
 		t.Fatal("GetFileWithCid ", err)
 	}
 	t.Logf("file:%s, size:%d", fn, len(data))
+}
+
+func TestUploadCarFetchBlock(t *testing.T) {
+	carFilePath := "./example.car"
+	// locatorURL := "https://storage-test-api.titannet.io"
+	// token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MzM0ODQ0NjUsImlkIjoiMHg5ZGFjNjNhYjE5OTQzMjdmZjAyMjY4MDUyZmQwYThkODlmZjgxMzNjIiwib3JpZ19pYXQiOjE3MzMzOTgwNjUsInJvbGUiOjB9.XJsveS9BWHzHZG8q4tJd0rBU8m290YIAlf3tyG7VCFo"
+	s, err := Initialize(&Config{TitanURL: locatorURL, Token: token, APIKey: apiKey})
+	if err != nil {
+		t.Fatal("NewStorage error ", err)
+	}
+
+	cid, err := s.UploadFilesWithPath(context.Background(), carFilePath, nil, false)
+	if err != nil {
+		t.Fatalf("UploadFilesWithPath %s", err)
+	}
+
+	list, err := s.ListAllBlocks(context.Background(), cid.String())
+	if err != nil {
+		t.Fatal("ListAllBlocks ", err)
+	}
+
+	var lastBlock string
+	for _, block := range list {
+		t.Log("block ", block)
+		lastBlock = block
+	}
+
+	if lastBlock == "" {
+		t.Log("no block")
+	}
+
+	reader, err := s.FetchBlockFromRoot(context.Background(), cid.String(), lastBlock)
+	if err != nil {
+		t.Fatal("FetchBlockFromRoot ", err)
+	}
+
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal("FetchBlockFromRoot ", err)
+	}
+
+	t.Logf("rootCid: %s, subcid: %s", cid.String(), lastBlock)
+	t.Logf("content size %d", len(content))
+	t.Log("content ", string(content))
 }
