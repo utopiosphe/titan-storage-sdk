@@ -316,7 +316,7 @@ func (s *webserver) ShareAsset(ctx context.Context, userID, areaID, assetCID str
 
 	s.setCredential(req)
 
-	log.Printf("url:%v apikey:%v token:%v", url, s.apiKey, s.token)
+	// log.Printf("url:%v apikey:%v token:%v", url, s.apiKey, s.token)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
