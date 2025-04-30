@@ -19,9 +19,6 @@ var (
 
 func TestBackoffRetryUploadAsset(t *testing.T) {
 
-	locatorURL = "https://tws.titannet.io"
-	apiKey = "IqhdYTbIFNiE01SSvLCjM3cryfgzTyYjd3Sc23183/TeSJoIi8O7fIFy2bcCcSIaVurnJa5sQxQ/yuX5FdfljL81zcHoS7v6jEIlmdcjsLQ="
-
 	s, err := storage.Initialize(&storage.Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
@@ -53,9 +50,6 @@ func TestBackoffRetryUploadAsset(t *testing.T) {
 }
 
 func TestBackoffRetryUploadStreamV2(t *testing.T) {
-
-	locatorURL = "https://tws.titannet.io"
-	apiKey = "IqhdYTbIFNiE01SSvLCjM3cryfgzTyYjd3Sc23183/TeSJoIi8O7fIFy2bcCcSIaVurnJa5sQxQ/yuX5FdfljL81zcHoS7v6jEIlmdcjsLQ="
 
 	s, err := storage.Initialize(&storage.Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
