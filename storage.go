@@ -28,7 +28,7 @@ const (
 	FileTypeFile   FileType = "file"
 	FileTypeFolder FileType = "folder"
 	timeout                 = 30 * time.Second
-	titanHostName           = "cassini-l1.titannet.io"
+	titanHostName           = ".cassini-l1.titannet.io"
 )
 
 type UploadFileResult struct {
