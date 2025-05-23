@@ -120,7 +120,7 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 }
 
 // return root, subs, error
-func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath string, progress ProgressFunc) (cid.Cid, error) {
+func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath string, progress ProgressFunc, options ...RequestOption) (cid.Cid, error) {
 	// delete template file if exist
 	fileName := filepath.Base(filePath)
 	tempFile := path.Join(os.TempDir(), fileName)
@@ -165,6 +165,10 @@ func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath st
 		AssetType: fileType,
 		NodeID:    s.candidateID,
 		GroupID:   s.groupID,
+	}
+
+	for _, opt := range options {
+		opt(&assetProperty)
 	}
 
 	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaIDs: s.areas}
@@ -356,7 +360,7 @@ func (s *storage) ListAllBlocks(ctx context.Context, rootCid string) ([]string, 
 }
 
 // UploadFilesWithPath uploads files from the specified path
-func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc, makeCar bool) (cid.Cid, error) {
+func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc, makeCar bool, options ...RequestOption) (cid.Cid, error) {
 	if makeCar {
 		return s.uploadFilesWithPathAndMakeCar(ctx, filePath, progress)
 	}
@@ -417,6 +421,10 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		GroupID:   s.groupID,
 	}
 
+	for _, opt := range options {
+		opt(&assetProperty)
+	}
+
 	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaIDs: s.areas}
 	_, err = s.webAPI.CreateAsset(context.Background(), &req)
 	if err != nil {
@@ -433,7 +441,7 @@ func (s *storage) Delete(ctx context.Context, rootCID string) error {
 }
 
 // UploadStream uploads a stream of data
-func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error) {
+func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, progress ProgressFunc, options ...RequestOption) (cid.Cid, error) {
 	memFile := memfile.New([]byte{})
 	root, err := createCarStream(r, memFile)
 	if err != nil {
@@ -452,6 +460,10 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 		AssetType: string(FileTypeFile),
 		NodeID:    s.candidateID,
 		GroupID:   s.groupID,
+	}
+
+	for _, opt := range options {
+		opt(&assetProperty)
 	}
 
 	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaIDs: s.areas}
@@ -490,7 +502,7 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 }
 
 // UploadStreamV2 uploads data from an io.Reader stream without making car to the titan storage.
-func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error) {
+func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, progress ProgressFunc, options ...RequestOption) (cid.Cid, error) {
 	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID, s.getArea(), false)
 	if err != nil {
 		return cid.Cid{}, err
@@ -607,6 +619,10 @@ func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, 
 		AssetType: "file",
 		NodeID:    nodeId,
 		GroupID:   s.groupID,
+	}
+
+	for _, opt := range options {
+		opt(&assetProperty)
 	}
 
 	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaIDs: s.areas}
@@ -798,7 +814,7 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAsse
 }
 
 // UploadFileWithURL uploads a file from the specified URL
-func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error) {
+func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc, options ...RequestOption) (string, string, error) {
 	log.Println("UploadFileWithURL link:", url)
 	rsp, err := http.Get(url)
 	if err != nil {
@@ -816,7 +832,7 @@ func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress Pr
 		fmt.Println("getFileNameFromURL ", err.Error())
 	}
 
-	rootCid, err := s.UploadStreamV2(ctx, rsp.Body, filename, progress)
+	rootCid, err := s.UploadStreamV2(ctx, rsp.Body, filename, progress, options...)
 	if err != nil {
 		return "", "", err
 	}
@@ -882,4 +898,11 @@ func (s *storage) getArea() string {
 		return s.areas[0]
 	}
 	return ""
+}
+
+// WithGroupID update file folder's id
+func WithGroupID(id int) RequestOption {
+	return func(ap *client.AssetProperty) {
+		ap.GroupID = id
+	}
 }

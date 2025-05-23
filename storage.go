@@ -24,6 +24,8 @@ import (
 // FileType represents the type of file or folder
 type FileType string
 
+type RequestOption func(*client.AssetProperty)
+
 const (
 	FileTypeFile   FileType = "file"
 	FileTypeFolder FileType = "folder"
@@ -50,6 +52,9 @@ type Storage interface {
 
 	// CreateFolder Create directories, including root and subdirectories
 	CreateFolder(ctx context.Context, name string, parentID int) error
+
+	// CreateFolderV2 Create directories, including root and subdirectories
+	CreateFolderV2(ctx context.Context, name string, parentID int) (int, error)
 
 	// ListDirectoryContents Retrieve a list of all folders and files.
 	// It takes limit and offset parameters for pagination and returns the asset list and any error encountered.
@@ -78,7 +83,7 @@ type Storage interface {
 	CreateSharedLink(ctx context.Context, assetCID string, folderID int) (string, error)
 
 	// UploadAsset Upload files/folders
-	UploadAsset(ctx context.Context, filePath string, reader io.Reader, progress ProgressFunc) (cid cid.Cid, err error)
+	UploadAsset(ctx context.Context, filePath string, reader io.Reader, progress ProgressFunc, options ...RequestOption) (cid cid.Cid, err error)
 
 	// UploadAssetWithUrl
 	UploadAssetWithUrl(ctx context.Context, url string) (cid cid.Cid, fileName string, err error)
@@ -94,7 +99,7 @@ type Storage interface {
 	// UploadFilesWithPath uploads files from the local file system to the titan storage.
 	// specified by the given filePath. It returns the CID (Content Identifier) and any error encountered.
 	// if makeCar is true, it will make car in local, else will make car in server
-	UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc, makeCar bool) (cid.Cid, error)
+	UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc, makeCar bool, options ...RequestOption) (cid.Cid, error)
 
 	// FetchBlockFromRoot fetch single block from rootCID
 	// It returns the block and any error encountered.
@@ -105,7 +110,7 @@ type Storage interface {
 
 	// UploadFileWithURL uploads a file from the specified URL to the titan storage.
 	// It returns the rootCID and the URL of the uploaded file, along with any error encountered.
-	UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error)
+	UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc, options ...RequestOption) (string, string, error)
 
 	// UploadFileWithURLV2
 	UploadFileWithURLV2(ctx context.Context, url string, progress ProgressFunc) (string, string, error)
@@ -113,9 +118,9 @@ type Storage interface {
 	// UploadStream uploads data from an io.Reader stream to the titan storage.
 	// if name is empty, name will be the cid
 	// It returns the CID of the uploaded data and any error encountered.
-	UploadStream(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error)
+	UploadStream(ctx context.Context, r io.Reader, name string, progress ProgressFunc, options ...RequestOption) (cid.Cid, error)
 	// UploadStreamV2 uploads data from an io.Reader stream without making car to the titan storage.
-	UploadStreamV2(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error)
+	UploadStreamV2(ctx context.Context, r io.Reader, name string, progress ProgressFunc, options ...RequestOption) (cid.Cid, error)
 	// ListUserAssets retrieves a list of user assets from the titan storage.
 	// It takes limit and offset parameters for pagination and returns the asset list and any error encountered.
 	ListUserAssets(ctx context.Context, parent, pageSize, page int) (*client.ListAssetRecordRsp, error)
@@ -235,6 +240,15 @@ func (s *storage) CreateFolder(ctx context.Context, name string, parent int) err
 	return err
 }
 
+// CreateFolderV2 Create directories, including root and subdirectories
+func (s *storage) CreateFolderV2(ctx context.Context, name string, parent int) (int, error) {
+	ag, err := s.webAPI.CreateGroup(ctx, name, parent)
+	if err != nil {
+		return 0, err
+	}
+	return ag.ID, nil
+}
+
 // ListDirectoryContents Retrieve a list of all folders and files.
 // It takes limit and offset parameters for pagination and returns the asset list and any error encountered.
 func (s *storage) ListDirectoryContents(ctx context.Context, parent, pageSize, page int) (*client.ListAssetRecordRsp, error) {
@@ -301,7 +315,7 @@ func (s *storage) CreateSharedLink(ctx context.Context, assetCID string, folderI
 }
 
 // UploadAsset Upload files/folders
-func (s *storage) UploadAsset(ctx context.Context, filePath string, reader io.Reader, progress ProgressFunc) (cid.Cid, error) {
+func (s *storage) UploadAsset(ctx context.Context, filePath string, reader io.Reader, progress ProgressFunc, options ...RequestOption) (cid.Cid, error) {
 	if filePath != "" {
 		fileType, err := getFileType(filePath)
 		if err != nil {
@@ -309,16 +323,16 @@ func (s *storage) UploadAsset(ctx context.Context, filePath string, reader io.Re
 		}
 
 		if fileType == string(FileTypeFolder) {
-			return s.uploadFilesWithPathAndMakeCar(ctx, filePath, progress)
+			return s.uploadFilesWithPathAndMakeCar(ctx, filePath, progress, options...)
 		}
 
 		if fileType == string(FileTypeFile) {
-			return s.UploadFilesWithPath(ctx, filePath, progress, false)
+			return s.UploadFilesWithPath(ctx, filePath, progress, false, options...)
 		}
 	}
 
 	if reader != nil {
-		return s.UploadStreamV2(ctx, reader, "", progress)
+		return s.UploadStreamV2(ctx, reader, "", progress, options...)
 	}
 
 	return cid.Cid{}, errors.New("FilePath or Reader must be non empty")
